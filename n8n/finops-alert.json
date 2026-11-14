@@ -1,0 +1,117 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "2a1e8978-bcaf-4d10-ad3d-717ffb229355",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "738d217d-f2fc-4bda-851b-89b2fe4d4697",
+      "name": "Webhook",
+      "webhookId": "2a1e8978-bcaf-4d10-ad3d-717ffb229355"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "29524cf9-c2f7-4ff9-957a-6d2f106da650",
+              "leftValue": "={{ $json.body.percent_used}}",
+              "rightValue": 80,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        224,
+        0
+      ],
+      "id": "51310477-8aaa-4b71-84dc-d4d5443be281",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "fromEmail": "amenkrifi@aiesec.net",
+        "toEmail": "amenkrifi5@gmail.com",
+        "subject": "Budget alert",
+        "emailFormat": "=text",
+        "text": "=Department {{ $json.body.department }} has used {{ $json.body.percent_used }}% of its monthly budget.",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        448,
+        -96
+      ],
+      "id": "057b6a21-e156-410b-9311-ab26e1f4aa45",
+      "name": "Send an Email",
+      "webhookId": "d4eed034-b0c6-487d-b729-82e5bc849b57",
+      "credentials": {
+        "smtp": {
+          "id": "ievrJhjKTCbwZwOb",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "c4b59393-4a76-47d1-9ade-928838aa97d0",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "bd4b01e7bed1bfe339b3bcc196e85af47ae202eec62e6eacdbb01fb591077713"
+  },
+  "nodeGroups": [],
+  "id": "cJuKVF1Xt71amcFP",
+  "tags": []
+}
