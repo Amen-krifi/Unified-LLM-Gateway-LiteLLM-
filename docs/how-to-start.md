@@ -30,6 +30,13 @@ $env:PYTHONUTF8=1
 python -m litellm.proxy.proxy_cli --config config.yaml --port 4000
 ```
 Wait for `Uvicorn running on http://0.0.0.0:4000`.
+**Terminal 4: router (port 5000)**
+```powershell
+python -m uvicorn router_proxy:app --port 5000
+```
+Apps send requests to port 5000 instead of 4000. The router picks
+`cheap-model` or `strong-model` and forwards the request to the gateway.
+Test it with `python test_router.py`.
 
 ## Test (4th terminal)
 ```powershell
