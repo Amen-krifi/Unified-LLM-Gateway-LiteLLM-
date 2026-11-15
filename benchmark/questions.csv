@@ -1,0 +1,101 @@
+id,question,category
+1,What is the capital of France?,simple
+2,Translate 'good morning' to Spanish,simple
+3,What does SQL stand for?,simple
+4,How many days are in a leap year?,simple
+5,Define the term "primary key",simple
+6,Who wrote Romeo and Juliet?,simple
+7,What is the largest planet in our solar system?,simple
+8,Translate 'thank you' to French,simple
+9,What does HTTP stand for?,simple
+10,What is 15 percent of 200?,simple
+11,What is the chemical symbol for gold?,simple
+12,Define the word "latency",simple
+13,What port does HTTPS use by default?,simple
+14,In which year did World War II end?,simple
+15,Compare star and snowflake schemas and recommend one for a retail data warehouse,complex
+16,Write a Python function that detects anomalies in a time series and explain its complexity,complex
+17,Analyze the trade-offs between microservices and a monolithic architecture for a small startup,complex
+18,Explain why a database index can slow down INSERT operations but speed up SELECT queries,complex
+19,Design a normalized schema for a hospital appointment system and justify each table,complex
+20,Compare TCP and UDP for a live video streaming application and recommend which to use,complex
+21,What is the capital of Japan?,simple
+22,Translate 'where is the train station' to German,simple
+23,What does API stand for?,simple
+24,Define the term "foreign key",simple
+25,Who painted the Mona Lisa?,simple
+26,How many continents are there?,simple
+27,What is the boiling point of water in Celsius?,simple
+28,Translate 'I would like a coffee please' to Italian,simple
+29,What does RAM stand for?,simple
+30,What is the square root of 144?,simple
+31,Which planet is known as the Red Planet?,simple
+32,How many kilobytes are in one megabyte?,simple
+33,Define the word "bandwidth",simple
+34,I was reading a travel guide yesterday evening and I got confused about something so could you please just tell me what the capital city of Australia is,simple
+35,Why is the sky blue and why are sunsets red?,complex
+36,Describe how you would migrate a 500 GB on-premise database to the cloud with minimal downtime,complex
+37,Evaluate the pros and cons of using NoSQL instead of a relational database for a social network,complex
+38,Write a SQL query that returns the top 3 customers by revenue per month and walk through how it works,complex
+39,What are the risks of storing passwords in plain text and how should a company handle authentication instead?,complex
+40,Outline a go-to-market strategy for a new mobile app aimed at university students,complex
+41,What is the capital of Brazil?,simple
+42,Translate 'good night' to Portuguese,simple
+43,What does CPU stand for?,simple
+44,Define the term "data warehouse",simple
+45,Who discovered penicillin?,simple
+46,How many seconds are in an hour?,simple
+47,What is the freezing point of water in Fahrenheit?,simple
+48,Translate 'how much does this cost' to Spanish,simple
+49,What does ETL stand for?,simple
+50,What is 12 times 12?,simple
+51,What is the largest ocean on Earth?,simple
+52,Define the word "firewall",simple
+53,What is the default port for SSH?,simple
+54,My teacher mentioned something in class last week about the first person to walk on the Moon and I forgot the name so can you remind me who it was,simple
+55,How would you design a star schema for tracking sales across stores and products and what grain would you choose?,complex
+56,Explain the difference between OLTP and OLAP systems and when a company should use each,complex
+57,Create a Python script that reads a CSV file and prints the average of each numeric column,complex
+58,What would happen to a company's network if its main router failed and how could it be made resilient to that?,complex
+59,Assess whether a small retail business should invest in a data lake or a traditional data warehouse,complex
+60,Plan a three-month roadmap for launching an online store with a limited budget of 5000 euros,complex
+61,What is the capital of Italy?,simple
+62,Translate 'see you tomorrow' to Spanish,simple
+63,What does DNS stand for?,simple
+64,Define the term "normalization" in databases,simple
+65,Who invented the telephone?,simple
+66,How many minutes are in a day?,simple
+67,What is the chemical formula of water?,simple
+68,Translate 'happy birthday' to German,simple
+69,What does SaaS stand for?,simple
+70,What is 25 times 4?,simple
+71,Which country has the largest population in the world?,simple
+72,Define the word "algorithm",simple
+73,What is the default port for HTTP?,simple
+74,I am preparing a presentation for tomorrow and I just need one quick fact which is the name of the author who wrote the novel 1984,simple
+75,Why do some startups fail even when they have a great product?,complex
+76,Compare the advantages of agile and waterfall methods for a university software project,complex
+77,Write a function in Python that checks whether a string is a palindrome and explain how it works,complex
+78,What factors should a company consider before moving its customer data to a public cloud provider?,complex
+79,Explain why denormalization is common in data warehouses even though it duplicates data,complex
+80,Propose a pricing strategy for a new subscription software product aimed at small businesses,complex
+81,What is the capital of Spain?,simple
+82,Translate 'good evening' to Italian,simple
+83,What does GPU stand for?,simple
+84,Define the term "cache",simple
+85,Who developed the theory of relativity?,simple
+86,How many hours are in a week?,simple
+87,What is the symbol for the element oxygen?,simple
+88,Translate 'excuse me' to French,simple
+89,What does IP stand for in networking?,simple
+90,What is 100 divided by 4?,simple
+91,What is the longest river in Africa?,simple
+92,Define the word "router",simple
+93,What is the default port for FTP?,simple
+94,Last night my friends and I were arguing about geography and nobody could remember so could you please just tell me the capital city of Canada,simple
+95,How should a small company protect itself against a ransomware attack?,complex
+96,Compare relational and graph databases for a recommendation engine and recommend one,complex
+97,Write a SQL stored procedure that archives old orders and describe how you would test it,complex
+98,What are the main bottlenecks in a slow database and how would you diagnose each one?,complex
+99,Evaluate whether a company should automate its customer support with chatbots,complex
+100,Describe a plan to train a team of ten people on a new CRM system in two weeks,complex
