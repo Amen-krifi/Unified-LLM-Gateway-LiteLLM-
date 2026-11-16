@@ -61,3 +61,28 @@ request may go straight to Ollama. This is expected.
 - The master key is never stored in the repo. Share it privately.
 - The `model:` line in the test output shows who answered: `strong-model` means
   the mock, `ollama_chat/...` means the fallback.
+
+
+  ## Budgets and department keys (router, port 5000)
+
+LiteLLM's built-in virtual keys could not run on our Windows PCs
+(Device Guard blocks the Prisma engine), so the router enforces
+budgets, RPM limits and keys using the PostgreSQL tables.
+
+One-time setup: run `sql/schema.sql`, `sql/views.sql` and
+`sql/department_keys.sql` in pgAdmin on the `llm_gateway` database.
+
+Start the router with these variables:
+```powershell
+$env:PGPASSWORD="ASK-THE-TEAM"
+$env:LITELLM_MASTER_KEY="ASK-THE-TEAM"
+$env:N8N_WEBHOOK_URL="PRODUCTION-WEBHOOK-URL"   # optional, for the 80% alert
+python -m uvicorn router_proxy:app --port 5000
+```
+
+Department keys: `sk-dept-marketing-isg2026`, `sk-dept-hr-isg2026`,
+`sk-dept-finance-isg2026`, `sk-dept-it-isg2026`.
+The master key skips limits and logging (used by the benchmark).
+
+Demo: `python test_budget.py sk-dept-hr-isg2026 15` after lowering HR's
+budget to 0.01 and raising its RPM limit in pgAdmin. Reset afterwards.
