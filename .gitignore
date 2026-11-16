@@ -228,3 +228,7 @@ keys.json
 keys.json
 .env.*
 !.env.example
+
+
+check_db.py
+apply_keys.py
