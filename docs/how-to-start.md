@@ -86,3 +86,5 @@ The master key skips limits and logging (used by the benchmark).
 
 Demo: `python test_budget.py sk-dept-hr-isg2026 15` after lowering HR's
 budget to 0.01 and raising its RPM limit in pgAdmin. Reset afterwards.
+
+The alert needs the n8n workflow to be **Published** and `N8N_WEBHOOK_URL` set to the production URL (`/webhook/...`, not `/webhook-test/`).
