@@ -55,7 +55,7 @@ def world(monkeypatch):
     """Router with a fake database and a fake gateway."""
     state = SimpleNamespace(
         reply=gateway_reply(), status=200, fail=False,
-        spent=0.0, budget=Decimal("30"), rpm=10,
+        spent=0.0, budget=Decimal("30"), rpm=10, tpm=10000,
         logs=[], gateway_calls=[])
 
     class FakeConn:
@@ -80,7 +80,7 @@ def world(monkeypatch):
 
     def fake_get_department(conn, key):
         if key == DEPT_KEY:
-            return [1, "HR", state.budget, state.rpm]
+            return [1, "HR", state.budget, state.rpm, state.tpm]
         return None
 
     def fake_log(conn, dept_id, model, category, tin, tout, cost, status):
@@ -95,6 +95,7 @@ def world(monkeypatch):
     monkeypatch.setattr(router_proxy, "log", fake_log)
     monkeypatch.setattr(router_proxy.httpx, "AsyncClient", FakeClient)
     router_proxy.recent.clear()
+    router_proxy.recent_tokens.clear()
     router_proxy.alerted.clear()
 
     state.client = TestClient(router_proxy.app)

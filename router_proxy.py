@@ -17,7 +17,8 @@ WEBHOOK = os.environ.get("N8N_WEBHOOK_URL", "")
 PRICE = {"cheap-model": 0.0000001, "strong-model": 0.00001}  # USD per token
 
 app = FastAPI()
-recent = defaultdict(deque)   # department id -> timestamps of the last minute
+recent = defaultdict(deque)   # department id -> request timestamps
+recent_tokens = defaultdict(deque)  # department id -> (timestamp, token count)
 alerted = set()               # (department id, month) already alerted at 80%
 
 # ---------------------------------------------------------------------------
@@ -112,7 +113,7 @@ def last_user_text(messages):
 
 def get_department(conn, key):
     rows = conn.run(
-        "select d.id, d.name, d.monthly_budget_usd, d.rpm_limit "
+        "select d.id, d.name, d.monthly_budget_usd, d.rpm_limit, d.tpm_limit "
         "from department_keys k join departments d on d.id = k.department_id "
         "where k.api_key = :key",
         key=key
@@ -206,7 +207,7 @@ async def chat(request: Request):
                 status_code=401
             )
 
-        dept_id, name, budget, rpm = dept
+        dept_id, name, budget, rpm, tpm = dept
         budget = float(budget)
         dept_name = name
 
@@ -223,6 +224,21 @@ async def chat(request: Request):
             record_request(dept_name, category, "rpm_limited", started)
             return JSONResponse(
                 {"error": f"RPM limit reached ({rpm}/min)"},
+                status_code=429
+            )
+
+        # TPM limit (actual tokens used in the last 60 seconds)
+        token_q = recent_tokens[dept_id]
+        while token_q and now - token_q[0][0] > 60:
+            token_q.popleft()
+
+        tokens_used = sum(count for _, count in token_q)
+        if tokens_used >= tpm:
+            log(conn, dept_id, model, category, 0, 0, 0, "failed")
+            conn.close()
+            record_request(dept_name, category, "tpm_limited", started)
+            return JSONResponse(
+                {"error": f"TPM limit reached ({tpm}/min)"},
                 status_code=429
             )
 
@@ -284,6 +300,8 @@ async def chat(request: Request):
         usage = data.get("usage") or {}
         tin = usage.get("prompt_tokens", 0) or 0
         tout = usage.get("completion_tokens", 0) or 0
+        if dept:
+            recent_tokens[dept[0]].append((time.time(), tin + tout))
         cost = (tin + tout) * PRICE[answered]
         fallback = model == "strong-model" and answered == "cheap-model"
         outcome = "fallback" if fallback else "success"
@@ -295,7 +313,7 @@ async def chat(request: Request):
         log(conn, dept[0], model, category, 0, 0, 0, "failed")
 
     if dept:
-        dept_id, name, budget, rpm = dept
+        dept_id, name, budget, rpm, tpm = dept
         budget = float(budget)
         percent = month_spend(conn, dept_id) / budget * 100
 

@@ -93,6 +93,19 @@ def test_rpm_limit_blocks_the_third_request(world):
     assert "RPM" in r.json()["error"]
 
 
+def test_tpm_limit_blocks_request_after_token_limit_is_used(world):
+    world.tpm = 35
+
+    first = ask(world, DEPT_KEY, SIMPLE)
+    assert first.status_code == 200
+    assert len(world.gateway_calls) == 1
+
+    second = ask(world, DEPT_KEY, SIMPLE)
+    assert second.status_code == 429
+    assert "TPM" in second.json()["error"]
+    assert len(world.gateway_calls) == 1
+
+
 def test_alert_is_triggered_at_80_percent(world):
     world.budget = 0.01
     world.spent = 0.0085
