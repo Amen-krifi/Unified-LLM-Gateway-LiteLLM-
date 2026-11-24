@@ -1,6 +1,10 @@
 from conftest import DEPT_KEY, MASTER, gateway_reply
 import router_proxy
 
+from deepeval import assert_test
+from deepeval.test_case import LLMTestCase
+from test_classifier import RoutingAccuracyMetric
+
 SIMPLE = "What is the capital of France?"
 COMPLEX = ("Compare star and snowflake schemas and recommend one "
            "for a retail data warehouse")
@@ -16,15 +20,31 @@ def ask(world, key, question):
 def test_simple_question_goes_to_cheap_model(world):
     r = ask(world, MASTER, SIMPLE)
     assert r.status_code == 200
-    assert r.headers["X-Route-Model"] == "cheap-model"
+
+    actual_model = r.headers["X-Route-Model"]
     assert world.gateway_calls[-1]["model"] == "cheap-model"
+
+    test_case = LLMTestCase(
+        input=SIMPLE,
+        actual_output=actual_model,
+        expected_output="cheap-model",
+    )
+    assert_test(test_case, [RoutingAccuracyMetric()])
 
 
 def test_complex_question_goes_to_strong_model(world):
     r = ask(world, MASTER, COMPLEX)
     assert r.status_code == 200
-    assert r.headers["X-Route-Model"] == "strong-model"
+
+    actual_model = r.headers["X-Route-Model"]
     assert world.gateway_calls[-1]["model"] == "strong-model"
+
+    test_case = LLMTestCase(
+        input=COMPLEX,
+        actual_output=actual_model,
+        expected_output="strong-model",
+    )
+    assert_test(test_case, [RoutingAccuracyMetric()])
 
 
 def test_unknown_key_is_rejected_with_401(world):
