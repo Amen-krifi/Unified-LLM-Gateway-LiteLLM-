@@ -232,3 +232,4 @@ keys.json
 
 check_db.py
 apply_keys.py
+.venv-deepeval/

@@ -4,3 +4,4 @@ pg8000==1.31.6
 prometheus-client==0.26.0
 pyyaml>=6.0
 pytest>=8.0
+deepeval==4.3.5
