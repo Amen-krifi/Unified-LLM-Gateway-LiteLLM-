@@ -1,42 +1,102 @@
-import random
+"""LLM Gateway FinOps dashboard - reads REAL data from PostgreSQL.
+
+Run:  streamlit run dashboard/dashboard.py
+Needs the same environment variables as the router (password never in code):
+  PGPASSWORD (required), PGHOST (default localhost), PGPORT (default 5432),
+  PGDATABASE (default llm_gateway), PGUSER (default postgres)
+"""
+import os
+
 import pandas as pd
+import pg8000.dbapi
 import plotly.express as px
 import streamlit as st
 
-random.seed(42)
-budgets = {"Marketing": 50, "HR": 30, "Finance": 80, "IT": 100}
-PRICE = {"cheap-model": 0.0001, "strong-model": 0.01}  # USD per 1K tokens
+st.set_page_config(page_title="LLM Gateway FinOps", layout="wide")
 
-rows = []
-for day in pd.date_range("2026-11-01", periods=14):
-    for dept in budgets:
-        for _ in range(random.randint(5, 20)):
-            model = random.choices(["cheap-model", "strong-model"], weights=[70, 30])[0]
-            tokens = random.randint(100, 800)
-            rows.append({
-                "date": day, "department": dept, "model": model,
-                "tokens": tokens,
-                "cost_usd": tokens / 1000 * PRICE[model],
-                "cost_unrouted": tokens / 1000 * PRICE["strong-model"],
-            })
-df = pd.DataFrame(rows)
 
-st.title("LLM Gateway - Token Spend per Team")
+def query(sql: str) -> pd.DataFrame:
+    conn = pg8000.dbapi.connect(
+        host=os.environ.get("PGHOST", "localhost"),
+        port=int(os.environ.get("PGPORT", "5432")),
+        database=os.environ.get("PGDATABASE", "llm_gateway"),
+        user=os.environ.get("PGUSER", "postgres"),
+        password=os.environ.get("PGPASSWORD", ""),
+    )
+    try:
+        cur = conn.cursor()
+        cur.execute(sql)
+        cols = [c[0] for c in cur.description]
+        return pd.DataFrame(cur.fetchall(), columns=cols)
+    finally:
+        conn.close()
 
-total = df["cost_usd"].sum()
-baseline = df["cost_unrouted"].sum()
-c1, c2, c3 = st.columns(3)
-c1.metric("Total spend (USD)", f"{total:.2f}")
-c2.metric("Spend without routing (USD)", f"{baseline:.2f}")
-c3.metric("Savings", f"{(baseline - total) / baseline:.0%}")
 
-by_dept = df.groupby("department", as_index=False)["cost_usd"].sum()
-by_dept["budget_used_pct"] = by_dept.apply(
-    lambda r: r["cost_usd"] / budgets[r["department"]] * 100, axis=1)
-st.plotly_chart(px.bar(by_dept, x="department", y="cost_usd", title="Spend per department"))
-st.plotly_chart(px.bar(by_dept, x="department", y="budget_used_pct",
-                       title="Budget used (%)"))
+@st.cache_data(ttl=10)
+def load():
+    return {
+        "budget": query("SELECT * FROM v_budget_usage"),
+        "savings": query("SELECT * FROM v_savings"),
+        "models": query("SELECT * FROM v_model_usage"),
+        "daily": query(
+            "SELECT date_trunc('day', created_at)::date AS day, "
+            "SUM(cost_usd) AS cost_usd, COUNT(*) AS requests "
+            "FROM cost_ledger GROUP BY 1 ORDER BY 1"),
+        "category": query(
+            "SELECT query_category, model_used, COUNT(*) AS requests "
+            "FROM cost_ledger GROUP BY 1, 2 ORDER BY 1, 2"),
+    }
 
-daily = df.groupby("date", as_index=False)["cost_usd"].sum()
-st.plotly_chart(px.line(daily, x="date", y="cost_usd", title="Daily spend"))
-st.plotly_chart(px.pie(df, names="model", title="Share of requests per model"))
+
+st.title("LLM Gateway - Token Spend per Department")
+st.caption("Live data from PostgreSQL (cost_ledger and views). Prices are simulated.")
+
+if st.button("Refresh"):
+    st.cache_data.clear()
+
+try:
+    data = load()
+except Exception as exc:  # DB down, wrong password, views missing...
+    st.error("Cannot read PostgreSQL. Check PGPASSWORD / PGHOST / PGPORT and that "
+             "sql/schema.sql, views.sql and the router have been run.")
+    st.code(str(exc))
+    st.stop()
+
+budget, savings, models = data["budget"], data["savings"], data["models"]
+if savings.empty or not savings.loc[0, "requests"]:
+    st.info("The cost ledger is empty. Send some requests through the router "
+            "(port 5000) or run the benchmark, then click Refresh.")
+    st.stop()
+
+s = savings.iloc[0]
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Requests logged", f"{int(s['requests'])}")
+c2.metric("Spend with routing (USD)", f"{float(s['cost_with_routing']):.6f}")
+c3.metric("Spend without routing (USD)", f"{float(s['cost_without_routing']):.6f}")
+c4.metric("Savings", f"{float(s['savings_percent']):.1f}%")
+
+left, right = st.columns(2)
+with left:
+    st.plotly_chart(px.bar(budget, x="department", y="spent_usd",
+                           title="Spend per department this month (USD)"),
+                    )
+with right:
+    fig = px.bar(budget, x="department", y="percent_used",
+                 title="Budget used this month (%)")
+    fig.add_hline(y=80, line_dash="dash", annotation_text="80% alert")
+    st.plotly_chart(fig)
+
+left, right = st.columns(2)
+with left:
+    st.plotly_chart(px.line(data["daily"], x="day", y="cost_usd", markers=True,
+                            title="Daily spend (USD)"))
+with right:
+    st.plotly_chart(px.pie(models.groupby("model_used", as_index=False)["requests"].sum(),
+                           names="model_used", values="requests",
+                           title="Share of requests per model"),
+                    )
+
+st.subheader("Requests per model and status (fallbacks and blocked requests)")
+st.dataframe(models)
+st.subheader("Budget table")
+st.dataframe(budget)
