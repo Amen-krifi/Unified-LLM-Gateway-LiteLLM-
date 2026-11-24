@@ -1,25 +1,93 @@
-
 import os
 import time
 from collections import defaultdict, deque
 
 import httpx
 import pg8000.native
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
+from prometheus_client import (CONTENT_TYPE_LATEST, Counter, Gauge, Histogram,
+                               generate_latest)
 
 from router import classify
 
 GATEWAY = os.environ.get("GATEWAY_URL", "http://localhost:4000")
 MASTER = os.environ.get("LITELLM_MASTER_KEY", "")
 WEBHOOK = os.environ.get("N8N_WEBHOOK_URL", "")
-PRICE = {"cheap-model": 0.0000001, "strong-model": 0.00001}
+PRICE = {"cheap-model": 0.0000001, "strong-model": 0.00001}  # USD per token
 
 app = FastAPI()
-recent = defaultdict(deque)
-alerted = set()
+recent = defaultdict(deque)   # department id -> timestamps of the last minute
+alerted = set()               # (department id, month) already alerted at 80%
+
+# ---------------------------------------------------------------------------
+# Prometheus metrics. Metadata only: never prompts, answers or API keys.
+# ---------------------------------------------------------------------------
+REQUESTS = Counter(
+    "router_requests_total", "Requests handled by the router",
+    ["department", "category", "outcome"])
+LATENCY = Histogram(
+    "router_request_latency_seconds", "End-to-end router latency in seconds",
+    ["outcome"], buckets=(0.1, 0.5, 1, 2, 5, 10, 30, 60, 120, 300))
+FALLBACKS = Counter(
+    "router_fallbacks_total",
+    "Requests sent to strong-model but answered by cheap-model", ["department"])
+TOKENS = Counter(
+    "router_tokens_total", "Tokens used", ["department", "model", "direction"])
+COST = Counter(
+    "router_cost_usd_total", "Cost in USD (simulated prices)",
+    ["department", "model"])
+BUDGET_PCT = Gauge(
+    "router_budget_used_percent", "Share of the monthly budget used",
+    ["department"])
+BUDGET_LIMIT = Gauge(
+    "router_budget_limit_usd", "Monthly budget in USD", ["department"])
+ALERTS = Counter(
+    "router_alerts_total", "Budget alerts by result", ["department", "result"])
 
 
+def record_request(department, category, outcome, started):
+    try:
+        REQUESTS.labels(department, category, outcome).inc()
+        LATENCY.labels(outcome).observe(time.perf_counter() - started)
+    except Exception as e:
+        print("metrics error:", str(e)[:100])
+
+
+def record_usage(department, model, tin, tout, cost, fallback):
+    try:
+        TOKENS.labels(department, model, "in").inc(tin)
+        TOKENS.labels(department, model, "out").inc(tout)
+        COST.labels(department, model).inc(cost)
+        if fallback:
+            FALLBACKS.labels(department).inc()
+    except Exception as e:
+        print("metrics error:", str(e)[:100])
+
+
+def record_budget(department, percent, limit):
+    try:
+        BUDGET_PCT.labels(department).set(percent)
+        BUDGET_LIMIT.labels(department).set(limit)
+    except Exception as e:
+        print("metrics error:", str(e)[:100])
+
+
+def record_alert(department, result):
+    try:
+        ALERTS.labels(department, result).inc()
+    except Exception as e:
+        print("metrics error:", str(e)[:100])
+
+
+@app.get("/metrics")
+def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+# ---------------------------------------------------------------------------
+# Database helpers (pg8000, pure Python)
+# ---------------------------------------------------------------------------
 def db():
     return pg8000.native.Connection(
         host="localhost",
@@ -89,6 +157,7 @@ async def send_alert(dept_id, name, percent):
 
     if not WEBHOOK:
         print("   (N8N_WEBHOOK_URL not set, alert not sent)")
+        record_alert(name, "not_configured")
         return
 
     try:
@@ -100,13 +169,19 @@ async def send_alert(dept_id, name, percent):
                     "percent_used": round(percent, 1)
                 }
             )
-            print("   n8n answered:", r.status_code, r.text[:150])
+        print("   n8n answered:", r.status_code, r.text[:150])
+        record_alert(name, "sent" if r.status_code < 300 else "http_error")
     except Exception as e:
         print("   alert failed:", str(e)[:100])
+        record_alert(name, "failed")
 
 
+# ---------------------------------------------------------------------------
+# Main endpoint
+# ---------------------------------------------------------------------------
 @app.post("/v1/chat/completions")
 async def chat(request: Request):
+    started = time.perf_counter()
     key = request.headers.get(
         "authorization", ""
     ).replace("Bearer ", "").strip()
@@ -118,12 +193,14 @@ async def chat(request: Request):
 
     conn = db()
     dept = None
+    dept_name = "master"
 
-    if not (MASTER and key == MASTER):
+    if not (MASTER and key == MASTER):          # master key skips the limits
         dept = get_department(conn, key)
 
         if dept is None:
             conn.close()
+            record_request("unknown", category, "unauthorized", started)
             return JSONResponse(
                 {"error": "unknown API key"},
                 status_code=401
@@ -131,7 +208,9 @@ async def chat(request: Request):
 
         dept_id, name, budget, rpm = dept
         budget = float(budget)
+        dept_name = name
 
+        # RPM limit (requests in the last 60 seconds)
         now = time.time()
         q = recent[dept_id]
 
@@ -141,6 +220,7 @@ async def chat(request: Request):
         if len(q) >= rpm:
             log(conn, dept_id, model, category, 0, 0, 0, "failed")
             conn.close()
+            record_request(dept_name, category, "rpm_limited", started)
             return JSONResponse(
                 {"error": f"RPM limit reached ({rpm}/min)"},
                 status_code=429
@@ -148,17 +228,21 @@ async def chat(request: Request):
 
         q.append(now)
 
+        # Monthly budget limit
         spent = month_spend(conn, dept_id)
 
         if spent >= budget:
             log(conn, dept_id, model, category, 0, 0, 0, "failed")
             conn.close()
+            record_budget(dept_name, spent / budget * 100, budget)
+            record_request(dept_name, category, "budget_exceeded", started)
             return JSONResponse(
                 {"error": f"monthly budget exceeded "
                           f"({spent:.4f} of {budget} USD)"},
                 status_code=429
             )
 
+    # Forward to the LiteLLM gateway
     try:
         async with httpx.AsyncClient(timeout=300) as client:
             r = await client.post(
@@ -174,6 +258,7 @@ async def chat(request: Request):
             log(conn, dept[0], model, category, 0, 0, 0, "failed")
 
         conn.close()
+        record_request(dept_name, category, "gateway_unreachable", started)
 
         return JSONResponse(
             {"error": f"gateway error: {str(e)[:100]}"},
@@ -183,42 +268,44 @@ async def chat(request: Request):
     resp = JSONResponse(data, status_code=r.status_code)
     resp.headers["X-Route-Category"] = category
     resp.headers["X-Route-Model"] = model
+    outcome = "upstream_error"
+
+    if r.status_code == 200:
+        # The gateway may report the model as "mock-frontier" or
+        # "strong-model"; only a llama/ollama name means a fallback happened.
+        returned = str(data.get("model", "")).lower()
+        answered = (
+            "cheap-model"
+            if ("llama" in returned or "ollama" in returned
+                or returned == "cheap-model")
+            else "strong-model"
+        )
+
+        usage = data.get("usage") or {}
+        tin = usage.get("prompt_tokens", 0) or 0
+        tout = usage.get("completion_tokens", 0) or 0
+        cost = (tin + tout) * PRICE[answered]
+        fallback = model == "strong-model" and answered == "cheap-model"
+        outcome = "fallback" if fallback else "success"
+
+        record_usage(dept_name, answered, tin, tout, cost, fallback)
+        if dept:
+            log(conn, dept[0], answered, category, tin, tout, cost, outcome)
+    elif dept:
+        log(conn, dept[0], model, category, 0, 0, 0, "failed")
 
     if dept:
         dept_id, name, budget, rpm = dept
         budget = float(budget)
-
-        if r.status_code == 200:
-            returned = str(data.get("model", "")).lower()
-            answered = (
-                "cheap-model"
-                if ("llama" in returned or "ollama" in returned or returned == "cheap-model")
-                else "strong-model"
-            )
-
-            usage = data.get("usage", {})
-            tin = usage.get("prompt_tokens", 0)
-            tout = usage.get("completion_tokens", 0)
-            cost = (tin + tout) * PRICE[answered]
-
-            status = (
-                "fallback"
-                if model == "strong-model" and answered == "cheap-model"
-                else "success"
-            )
-
-            log(conn, dept_id, answered, category, tin, tout, cost, status)
-
-        else:
-            log(conn, dept_id, model, category, 0, 0, 0, "failed")
-
         percent = month_spend(conn, dept_id) / budget * 100
 
         resp.headers["X-Department"] = name
         resp.headers["X-Budget-Used-Pct"] = f"{percent:.1f}"
+        record_budget(name, percent, budget)
 
         if percent >= 80:
             await send_alert(dept_id, name, percent)
 
     conn.close()
+    record_request(dept_name, category, outcome, started)
     return resp
